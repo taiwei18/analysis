@@ -1,19 +1,18 @@
 <template>
   <h1>Excel导入解析</h1>
   <a-card title="导入表格格式" class="ma">
-    <p>表格仅供展示校对</p>
-    <p>关键词和敏感词必须/分割</p>
-    <p>表头依次设置为product_name，keywords，sensitive_words，answer</p>
+    <p>多个关键词和多个敏感词必须/分割</p>
+    <p>请确保excel表格有数据,并且按照既定格式来</p>
+    <p>表头依次设置为product_name，keywords，sensitive_words，answer，issue</p>
   </a-card>
-  <div class="ma">
-    <a-input-search v-model:value="searchValue" placeholder="input search text" disabled style="width: 200px"
+  <div class="ma table-header">
+    <a-input-search style="width: 300px;" v-model:value="searchValue" placeholder="input search text" enter-button
       @search="onSearch" />
-    <input type="file" @change="handleFileUpload" />
-    <a-upload v-model:file-list="fileList" name="file" action="http://localhost:3000/api/upload" :headers="headers"
-      @change="handleChange">
+    <a-button type="primary" @Click="handleExcel">导出Excel</a-button>
+    <a-upload name="file" action="http://localhost:3000/upload" :headers="headers" @change="handleChange">
       <a-button style="margin: 20px 0;">
         <upload-outlined></upload-outlined>
-        Click to Upload
+        导入Excel
       </a-button>
     </a-upload>
   </div>
@@ -23,7 +22,6 @@
         <a-tag :bordered="false" color="processing" style="cursor: pointer;" @Click="showModal(record)">修改</a-tag>
       </template>
     </template>
-
   </a-table>
   <a-modal v-model:open="open" title="修改" style="width:50vw;" centered>
     <a-form :model="formState" name="basic" autocomplete="off" @finishFailed="onFinishFailed" layout="vertical">
@@ -48,6 +46,16 @@
       <a-button type="primary" @Click="handleOk">确定</a-button>
     </template>
   </a-modal>
+  <a-modal v-model:open="uploadOpen" title="上传列表" @ok="handleUpload" ok-text="确认" cancel-text="取消" style="width:80vw;">
+    <h2 style="text-align: center;">请核对数据，如确认无误点击确认即可更新列表</h2>
+    <a-table :dataSource="dataUpload" :columns="columns">
+      <template #bodyCell="{ record, column }">
+        <template v-if="column.key === 'column'">
+          <a-tag :bordered="false" color="processing" style="cursor: pointer;" @Click="showModal(record)">修改</a-tag>
+        </template>
+      </template>
+    </a-table>
+  </a-modal>
 </template>
 <script setup lang="ts">
 import { ref, reactive, onMounted, h } from 'vue'
@@ -63,11 +71,17 @@ interface FormState {
   sensitive_words: string;
   answer: string;
 }
+interface DataTabel {
+  product_name: string;
+  keywords: string;
+  sensitive_words: string;
+  answer: string;
+}
 let searchValue = ref('')
-const selectedFile = ref(null)
-const fileList = ref([]);
-let dataSource = ref([])
+let dataSource = ref<Array<DataTabel>>([])
+let dataUpload = ref<Array<DataTabel>>([])
 const open = ref<boolean>(false);
+const uploadOpen = ref<boolean>(false);
 const columns = reactive([
   {
     title: '产品',
@@ -116,47 +130,44 @@ onMounted(() => {
 const getList = () => {
   requestData(product_api.getProducts, {}, 'GET'
   ).then((res) => {
-    dataSource.value = res.data.data.recordset
+    dataSource.value = res.data.recordset
   })
 }
 //搜索
 const onSearch = (value: string) => {
-  console.log(value);
   searchValue.value = value
-  requestData(product_api.searchproduct, { searchValue: value }
+  requestData(product_api.searchproduct, { keywords: value }
   ).then((res) => {
-    console.log(res);
+    const { recordset = [] } = res.data
+    dataSource.value = recordset
+    console.log(recordset);
   })
 }
-//上传 ant
+//上传
 const handleChange = (info: UploadChangeParam) => {
   if (info.file.status !== 'uploading') {
-    console.log(info.file, info.fileList);
+    if (info.file.response.code === 200) {
+      uploadOpen.value = true;
+      dataUpload.value = info.file.response.data
+    }
   }
   if (info.file.status === 'done') {
-    message.success(`${info.file.name} file uploaded successfully`);
+    message.success(`${info.file.name} 上传解析成功`);
   } else if (info.file.status === 'error') {
     message.error(`${info.file.name} file upload failed.`);
   }
 
 };
-//上传
-const handleFileUpload = (event: any) => {
-  selectedFile.value = event.target.files[0];
-  const formData = new FormData();
-  if (selectedFile.value !== null) {
-    formData.append("file", new Blob([selectedFile.value]));
-  }
-  requestData(product_api.uploadProduct, formData
-  ).then(() => {
-    // dataSource.value = res.data
+//导出
+const handleExcel = () => {
+  requestData(product_api.exportProduct, {}, 'GET'
+  ).then((res) => {
     notification.success({
-      message: '上传成功',
+      message: res.data.msg,
       description:
-        '上传成功',
+        '路径为D:\code\my-node-project',
       icon: () => h(SmileOutlined, { style: 'color: #108ee9' }),
     });
-    getList()
   })
 }
 //弹窗
@@ -165,17 +176,26 @@ const showModal = (record: FormState) => {
   formState = record
   open.value = true;
 }
+//关闭导入弹窗
+const handleUpload = () => {
+  console.log(dataUpload.value);
+  requestData(product_api.saveExcel, { data: dataUpload.value }
+  ).then(() => {
+    getList()
+    uploadOpen.value = false;
+  })
+}
 //提交表单
 const handleOk = async () => {
-  const { data } = await requestData(product_api.updateProduct, formState)
-  console.log(data);
+  if (!uploadOpen.value) {
+    await requestData(product_api.updateProduct, formState)
+  }
   open.value = false;
 };
 const onFinishFailed = (errorInfo: any) => {
   console.log('Failed:', errorInfo);
 };
 const headers = {
-  'Content-Type': 'multipart/form-data',
 };
 // defineProps<{ dataSource: Array<string> }>()
 
@@ -187,5 +207,11 @@ const headers = {
 
 .ma {
   margin: 20px 0;
+}
+
+.table-header {
+  display: flex;
+  align-items: center;
+  gap: 15px;
 }
 </style>

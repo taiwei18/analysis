@@ -1,4 +1,5 @@
 import axios from "axios";
+import { message } from 'ant-design-vue';
 
 //初始化请求
 const service = axios.create({
@@ -10,6 +11,21 @@ const service = axios.create({
 service.interceptors.request.use(
     request => {
         return request;
+    },
+    error => {
+        return Promise.reject(error);
+    }
+);
+//请求后回调
+service.interceptors.response.use(
+    response => {
+        if (response.data.code == '200') {
+            message.success(`${response.data.msg}`);
+        } else {
+            message.error(`${response.data.msg}`);
+        }
+        console.log(`${response.config.url}请求后回调`, response);
+        return response.data;
     },
     error => {
         return Promise.reject(error);

@@ -5,12 +5,16 @@ const product_api = {
     createProduct: "/products",
     //上传
     uploadProduct: "/upload",
+    //保存到数据库
+    saveExcel:'/saveExcel',
     //删除
     deleteProduct: "/products/:id",
     //修改
     updateProduct: "/updateproduct",
     //搜索
-    searchproduct:"/searchproduct"
+    searchproduct:"/search",
+    //导出
+    exportProduct:"/exportProduct",
   };
   export default product_api;
   
